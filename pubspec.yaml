@@ -31,10 +31,25 @@ dependencies:
   flutter:
     sdk: flutter
 
-
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.6
+
+  # Note: TFLite inference is done via native Android Platform Channel
+  # See android/app/src/main/kotlin/.../MainActivity.kt
+
+  # Sensor access (accelerometer + gyroscope)
+  sensors_plus: ^4.0.2
+
+  # State management
+  provider: ^6.1.1
+
+  # Charts for confidence visualization
+  fl_chart: ^0.66.0
+
+  # Stream utilities (StreamZip)
+  async: ^2.11.0
+  vector_math: ^2.1.4
 
 dev_dependencies:
   flutter_test:
@@ -58,10 +73,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  # TFLite model and preprocessing parameters
+  assets:
+    - assets/models/gait_lstm_model.tflite
+    - assets/models/preprocessing_params.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware

@@ -2,10 +2,66 @@
 
 ## 📱 Project Overview
 
-**Goal**: Flutter mobile app for real-time gait-based activity classification
-**Platform**: Android/iOS
-**Framework**: Flutter + TFLite
-**Models**: GRU (89.9%), 1D CNN (90.2%), or BiLSTM (88.9%)
+**Goal**: Flutter mobile app for real-time gait-based activity classification  
+**Platform**: Android/iOS  
+**Framework**: Flutter + TFLite  
+**Models**: GRU (89.9%), 1D CNN (90.2%), CNN-LSTM (93.0%)  
+**Repository**: Separate Flutter project (requires manual file transfer)
+
+---
+
+## 🚀 Quick Setup for Separate Flutter Repository
+
+### Step 1: Copy Required Files from Training Project
+
+**From this project** (`human-gait-recognition-with-smartphone-sensors`), copy these files to your Flutter project:
+
+```bash
+# 1. TFLite Models (choose one or all)
+Copy from: models/mobile/gait_lstm_model.tflite
+To:        <your-flutter-project>/assets/models/gait_model.tflite
+
+# 2. Model Metadata (optional but recommended)
+Copy from: models/mobile/gait_lstm_metadata.json
+To:        <your-flutter-project>/assets/models/model_metadata.json
+
+# 3. Preprocessing Configuration - CRITICAL!
+Extract from: data/processed_no_overlap/preprocessing_config.json
+Create:       <your-flutter-project>/assets/models/preprocessing_params.json
+```
+
+### Step 2: Extract Normalization Parameters
+
+**CRITICAL**: Open `data/processed_no_overlap/preprocessing_config.json` and find the `preprocessor_params` section:
+
+```json
+{
+  "preprocessor_params": {
+    "mean": [value1, value2, value3, value4, value5, value6],
+    "std": [value1, value2, value3, value4, value5, value6]
+  }
+}
+```
+
+Create `assets/models/preprocessing_params.json` in your Flutter app:
+
+```json
+{
+  "mean": [copy values from preprocessing_config.json],
+  "std": [copy values from preprocessing_config.json],
+  "window_size": 200,
+  "sampling_rate": 100,
+  "features": ["Gx", "Gy", "Gz", "Ax", "Ay", "Az"]
+}
+```
+
+### Step 3: File Transfer Checklist
+
+- [ ] Copy TFLite model file (gait_lstm_model.tflite recommended)
+- [ ] Extract normalization parameters (mean & std arrays)
+- [ ] Create preprocessing_params.json
+- [ ] (Optional) Copy model metadata JSON
+- [ ] Verify file sizes match (GRU: 209 KB, CNN: 351 KB, CNN-LSTM: 379 KB)
 
 ---
 
@@ -29,88 +85,46 @@
 
 ## 🔧 Part 1: Model Conversion (Python → TFLite)
 
-### Step 1: Convert Keras Model to TFLite
+### ✅ Models Already Converted!
 
-Create `src/models/convert_to_tflite.py`:
+Your models have been successfully converted using the script at:
+- **Script**: `src/deployment/convert_to_tflite.py`
+- **Output**: `models/mobile/` directory
 
-```python
-import tensorflow as tf
-import numpy as np
-from pathlib import Path
+### Available TFLite Models
 
-def convert_model_to_tflite(model_path, output_path, quantize=False):
-    """
-    Convert Keras model to TFLite format.
-    
-    Args:
-        model_path: Path to .h5 model file
-        output_path: Path to save .tflite file
-        quantize: Apply quantization for smaller size
-    """
-    # Load model
-    model = tf.keras.models.load_model(model_path)
-    
-    # Convert to TFLite
-    converter = tf.lite.TFLiteConverter.from_keras_model(model)
-    
-    if quantize:
-        # Dynamic range quantization (smaller size, faster)
-        converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    
-    tflite_model = converter.convert()
-    
-    # Save
-    with open(output_path, 'wb') as f:
-        f.write(tflite_model)
-    
-    print(f"✅ Model converted: {output_path}")
-    print(f"   Size: {len(tflite_model) / 1024:.2f} KB")
-    
-    # Test inference
-    test_inference(output_path)
+| Model | File | Size | Compression | Parameters |
+|-------|------|------|-------------|------------|
+| **GRU** | `gait_lstm_model.tflite` | 209 KB | 82% | 93,957 |
+| **1D CNN** | `gait_cnn_model.tflite` | 351 KB | 84% | 176,965 |
+| **CNN-LSTM** | `gait_cnn_lstm_model.tflite` | 379 KB | 83% | 184,005 |
 
-def test_inference(tflite_path):
-    """Test TFLite model inference."""
-    # Load TFLite model
-    interpreter = tf.lite.Interpreter(model_path=str(tflite_path))
-    interpreter.allocate_tensors()
-    
-    # Get input/output details
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-    
-    print(f"\n📊 Model Details:")
-    print(f"   Input shape: {input_details[0]['shape']}")
-    print(f"   Input type: {input_details[0]['dtype']}")
-    print(f"   Output shape: {output_details[0]['shape']}")
-    
-    # Test with dummy data
-    input_shape = input_details[0]['shape']
-    test_data = np.random.randn(*input_shape).astype(np.float32)
-    
-    interpreter.set_tensor(input_details[0]['index'], test_data)
-    interpreter.invoke()
-    output = interpreter.get_tensor(output_details[0]['index'])
-    
-    print(f"\n✅ Test inference successful!")
-    print(f"   Output: {output[0]}")
-    print(f"   Predicted class: {np.argmax(output[0])}")
+**Quantization**: All models use float16 quantization
+**Model metadata**: Individual JSON files for each model + combined `models_metadata.json`
 
-# Convert your best models
-models_to_convert = [
-    ('results/lstm_20251206_170855/best_model.h5', 'mobile_app/assets/models/gru_model.tflite'),
-    ('results/1d_cnn_20251206_154352/best_model.h5', 'mobile_app/assets/models/cnn_model.tflite'),
-]
+### To Convert Additional Models
 
-for model_path, output_path in models_to_convert:
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    convert_model_to_tflite(model_path, output_path, quantize=True)
-```
-
-**Run**:
+**Run the conversion script**:
 ```bash
-python src/models/convert_to_tflite.py
+# Convert all latest models
+python src/deployment/convert_to_tflite.py --all
+
+# Convert specific model
+python src/deployment/convert_to_tflite.py --model results/your_model/best_model.h5
+
+# Options
+python src/deployment/convert_to_tflite.py --all --quantize float16  # Default
+python src/deployment/convert_to_tflite.py --all --quantize int8     # Smaller, may need calibration
+python src/deployment/convert_to_tflite.py --all --quantize none     # No compression
 ```
+
+### Model Features
+
+**All models support**:
+- ✅ LSTM/GRU layers (SELECT_TF_OPS enabled)
+- ✅ Float16 quantization (smaller size)
+- ✅ Mobile-optimized inference
+- ✅ Complete metadata (input/output shapes, class names, preprocessing params)
 
 ---
 
@@ -210,6 +224,34 @@ dependencies:
 ---
 
 ## 🔧 Part 4: Core Implementation
+
+### Critical: Sensor Configuration
+
+**⚠️  SENSOR REQUIREMENTS**
+
+Your phone's sensors must provide data in the correct format:
+
+```dart
+// Data order MUST be: [Gx, Gy, Gz, Ax, Ay, Az]
+// Gx, Gy, Gz: Gyroscope (rad/s) - angular velocity
+// Ax, Ay, Az: Accelerometer (m/s²) - linear acceleration
+```
+
+**Sensor Placement**:
+- Phone should be in **center position** (waist/pocket)
+- Same placement as training data (Center sensor)
+- Screen facing body
+- Top of phone pointing up
+
+**Sensor Axes** (Android/iOS standard):
+- **X-axis**: Horizontal (left to right when facing screen)
+- **Y-axis**: Vertical (bottom to top when facing screen)
+- **Z-axis**: Perpendicular (out of screen toward user)
+
+**Sampling Rate**: 
+- Target: 100 Hz
+- Actual rate may vary (80-120 Hz acceptable)
+- Use timestamp-based interpolation if needed
 
 ### 1. Sensor Data Collection
 
@@ -462,42 +504,136 @@ class _HomeScreenState extends State<HomeScreen> {
 
 ---
 
-## 📋 Part 5: Preprocessing Parameters File
+## 📋 Part 5: Model Files Setup (Separate Repository)
 
-**`mobile_app/assets/models/preprocessing_params.json`**:
+### Files Location in Training Project
 
-Extract from `data/processed_no_overlap/preprocessing_config.json`:
+**Source directory**: `models/mobile/` in training project
 
+```
+models/mobile/
+├── gait_lstm_model.tflite         # GRU model (recommended - 209 KB)
+├── gait_cnn_model.tflite          # 1D CNN model (351 KB)
+├── gait_cnn_lstm_model.tflite     # CNN-LSTM model (379 KB)
+├── gait_lstm_metadata.json        # GRU metadata
+├── gait_cnn_metadata.json         # CNN metadata
+├── gait_cnn_lstm_metadata.json    # CNN-LSTM metadata
+└── models_metadata.json            # Combined metadata
+```
+
+### Flutter App Structure
+
+**Target directory** in your Flutter project:
+
+```
+your-flutter-app/
+└── assets/
+    └── models/
+        ├── gait_model.tflite              # Copied model file
+        └── preprocessing_params.json       # CRITICAL: Normalization params
+```
+
+### Manual File Transfer Steps
+
+**1. Copy Model File**:
+```bash
+# Choose one model (GRU recommended)
+cp models/mobile/gait_lstm_model.tflite <your-flutter-app>/assets/models/gait_model.tflite
+```
+
+**2. Create Preprocessing Parameters**:
+- Open `data/processed_no_overlap/preprocessing_config.json` in training project
+- Find `"preprocessor_params"` section
+- Copy `mean` and `std` arrays
+- Create `preprocessing_params.json` in Flutter app (see example below)
+
+**3. Update pubspec.yaml** in Flutter app:
+```yaml
+flutter:
+  assets:
+    - assets/models/gait_model.tflite
+    - assets/models/preprocessing_params.json
+```
+
+### Model Metadata Structure
+
+Each model has a JSON metadata file with:
+
+**Example** (`gait_lstm_metadata.json`):
 ```json
 {
-  "mean": [
-    0.012345,
-    -0.045678,
-    0.078901,
-    0.023456,
-    9.815678,
-    0.012345
+  "model_info": {
+    "model_name": "GRU",
+    "input_shape": [null, 200, 6],
+    "output_shape": [null, 5],
+    "parameters": 93957,
+    "tflite_size_kb": 208.56,
+    "quantization": "float16"
+  },
+  "class_names": [
+    "Flat Walk",
+    "Up Stairs",
+    "Down Stairs",
+    "Up Slope",
+    "Down Slope"
   ],
-  "std": [
-    0.523456,
-    0.456789,
-    0.678901,
-    0.345678,
-    0.234567,
-    0.456789
-  ],
-  "window_size": 200,
-  "sampling_rate": 100,
-  "num_classes": 5,
-  "class_labels": {
-    "0": "Flat Walk",
-    "1": "Up Stairs",
-    "2": "Down Stairs",
-    "3": "Up Slope",
-    "4": "Down Slope"
+  "preprocessing": {
+    "window_size": 200,
+    "sampling_rate": 100,
+    "overlap": 0.0,
+    "normalization": "z-score",
+    "features": ["Gx", "Gy", "Gz", "Ax", "Ay", "Az"]
+  },
+  "version": "1.0.0"
+}
+```
+
+### Recommended Model for Flutter App
+
+**Use GRU model** (`gait_lstm_model.tflite`):
+- ✅ Smallest size: 209 KB
+- ✅ Best accuracy: 89.9%
+- ✅ Fast inference
+- ✅ Low battery consumption
+
+### Critical: Normalization Parameters
+
+**⚠️  MOST IMPORTANT STEP - DO NOT SKIP!**
+
+Without correct normalization parameters, your predictions will be completely wrong!
+
+#### How to Extract Parameters:
+
+1. **Open** in training project: `data/processed_no_overlap/preprocessing_config.json`
+
+2. **Find** this section:
+```json
+{
+  "preprocessor_params": {
+    "mean": [0.0123..., -0.0456..., ...],  // 6 values
+    "std": [0.5234..., 0.4567..., ...]     // 6 values
   }
 }
 ```
+
+3. **Create** in Flutter app: `assets/models/preprocessing_params.json`
+```json
+{
+  "mean": [value1, value2, value3, value4, value5, value6],
+  "std": [value1, value2, value3, value4, value5, value6],
+  "window_size": 200,
+  "sampling_rate": 100,
+  "features": ["Gx", "Gy", "Gz", "Ax", "Ay", "Az"]
+}
+```
+
+#### Parameter Meaning:
+- **mean[0-2]**: Gyroscope mean (Gx, Gy, Gz)
+- **mean[3-5]**: Accelerometer mean (Ax, Ay, Az)
+- **std[0-2]**: Gyroscope std dev (Gx, Gy, Gz)
+- **std[3-5]**: Accelerometer std dev (Ax, Ay, Az)
+
+**Formula**: `normalized_value = (raw_value - mean) / std`
 
 ---
 
@@ -542,11 +678,11 @@ final activityColors = {
 ### 3. Model Selection
 | Model | Size | Speed | Accuracy | Recommendation |
 |-------|------|-------|----------|----------------|
-| **GRU** | ~500 KB | Fast | 89.9% | ⭐ Best balance |
-| **1D CNN** | ~300 KB | Fastest | 90.2% | ⭐ Best for speed |
-| **BiLSTM** | ~800 KB | Slow | 88.9% | Not recommended |
+| **GRU** | 209 KB | Fast | 89.9% | ⭐ Best overall |
+| **1D CNN** | 351 KB | Fastest | 90.2% | ⭐ Best for speed |
+| **CNN-LSTM** | 379 KB | Slower | 93.0% | ⚠️ Use with caution |
 
-**Recommendation**: Use **GRU** or **1D CNN**
+**Recommendation**: Use **GRU** (`gait_lstm_model.tflite`)
 
 ---
 
@@ -567,10 +703,47 @@ final activityColors = {
 - Different users (generalization)
 - Battery consumption
 
+### 4. Validation Checklist
+
+**Before deploying**:
+
+- [ ] **Test normalization**: Print raw and normalized values, verify they're in reasonable range (-3 to +3 typically)
+- [ ] **Verify sensor data**: Log first 10 samples, check order is [Gx, Gy, Gz, Ax, Ay, Az]
+- [ ] **Check window size**: Confirm 200 samples collected before inference
+- [ ] **Test all activities**: Walk flat, up/down stairs, up/down slopes
+- [ ] **Verify predictions**: Activity should match what you're doing
+- [ ] **Check confidence**: Should be > 70% for clear activities
+- [ ] **Monitor latency**: Should be < 100ms per prediction
+- [ ] **Test battery**: Monitor drain over 1 hour
+
+### 5. Troubleshooting Guide
+
+**Problem**: Wrong predictions (e.g., always predicts "Flat Walk")
+- ✅ Check normalization parameters are correct
+- ✅ Verify sensor data order [Gx, Gy, Gz, Ax, Ay, Az]
+- ✅ Confirm phone placement (center/waist)
+- ✅ Test with actual walking, not stationary
+
+**Problem**: Predictions change randomly
+- ✅ Check sampling rate (should be ~100 Hz)
+- ✅ Verify window size is exactly 200 samples
+- ✅ Ensure no overlap in window creation
+
+**Problem**: App crashes during inference
+- ✅ Verify input shape [1, 200, 6]
+- ✅ Check data type is float32
+- ✅ Ensure model file loaded correctly
+
+**Problem**: Low confidence scores (< 50%)
+- ✅ Activity might be ambiguous
+- ✅ Phone placement might be wrong
+- ✅ Sensor calibration might be needed
+
 ### Expected Performance
 - **Latency**: 50-100ms per prediction
 - **Battery**: ~5-10% per hour
 - **Accuracy**: 85-90% (matches test set)
+- **Confidence**: 70-95% for clear activities
 
 ---
 
